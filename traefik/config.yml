@@ -86,7 +86,6 @@ http:
     internal-secure:
       insecureSkipVerify: true
 
-  # Organized routers by service type
   routers:
     # Admin Services
     dashboard:
@@ -179,7 +178,6 @@ http:
       middlewares:
         - acme-middleware
 
-    # Your website router with lower priority
     website:
       rule: "Host(`bobparsons.dev`) || Host(`www.bobparsons.dev`)"
       service: website-service
