@@ -1,0 +1,289 @@
+http:
+  middlewares:
+    # Consolidated security headers
+    security-headers:
+      headers:
+        frameDeny: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000  # 1 year
+        customResponseHeaders:
+          Content-Security-Policy: "default-src 'self' http: https: data: blob: 'unsafe-inline'"
+          Referrer-Policy: "strict-origin-when-cross-origin"
+          X-Frame-Options: "DENY"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+
+    # Updated NAS headers without deprecated sslRedirect
+    nas-headers:
+      headers:
+        customRequestHeaders:
+          Host: ""
+          X-Real-IP: ""
+          X-Forwarded-For: ""
+          X-Forwarded-Proto: "https"
+
+    nextcloud-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        customResponseHeaders:
+          X-Robots-Tag: "none"
+          X-Download-Options: "noopen"
+          X-Permitted-Cross-Domain-Policies: "none"
+          Referrer-Policy: "no-referrer"
+          X-Frame-Options: "SAMEORIGIN"
+          Content-Security-Policy: "frame-ancestors 'self'; default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; frame-src 'self';"
+    local-only:
+      ipWhiteList:
+        sourceRange:
+          - "127.0.0.1/32"
+          - "192.168.86.0/24"
+
+    auth-headers:
+      headers:
+        customRequestHeaders:
+          X-Real-IP: ""
+          X-Forwarded-For: ""
+          X-Forwarded-Proto: "https"
+
+    websocket-headers:
+      headers:
+        customRequestHeaders:
+          Upgrade: ""
+          Connection: "upgrade"
+
+    nextcloud-buffering:
+      buffering:
+        maxRequestBodyBytes: 536870912  # 512MB
+        memRequestBodyBytes: 524288     # 512KB
+        maxResponseBodyBytes: 536870912
+        memResponseBodyBytes: 524288
+        retryExpression: ""
+
+    acme-middleware:
+      stripPrefix:
+        prefixes:
+          - "/.well-known/acme-challenge/"
+
+    jellyfin-headers:
+      headers:
+        customResponseHeaders:
+          X-Robots-Tag: "noindex, nofollow, nosnippet, noarchive, notranslate, noimageindex"
+        frameDeny: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+
+  # Consolidated transports
+  serversTransports:
+    default-secure:
+      insecureSkipVerify: false
+    internal-secure:
+      insecureSkipVerify: true
+
+  # Organized routers by service type
+  routers:
+    # Admin Services
+    dashboard:
+      rule: "Host(`192.168.86.202`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      service: api@internal
+      entryPoints:
+        - admin
+      middlewares:
+        - local-only
+
+
+    grafana-service:
+      rule: "Host(`grafana.bobparsons.dev`)"
+      service: grafana-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+
+    jellyfin:
+      rule: "Host(`jelly.bobparsons.dev`)"
+      service: jellyfin-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+        - websocket-headers
+        - jellyfin-headers
+
+    # CI/CD Services
+    drone-service:
+      rule: "Host(`drone.bobparsons.dev`)"
+      service: drone-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+
+    # Security Services
+    warden-service:
+      rule: "Host(`warden.bobparsons.dev`)"
+      service: warden-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+
+    auth-service:
+      rule: "Host(`auth.waugze.com`)"
+      service: auth-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+        - auth-headers
+
+    auth-service-grpc:
+      rule: "Host(`auth.waugze.com`) && Headers(`Content-Type`, `application/grpc`)"
+      service: auth-service
+      entryPoints:
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+        - auth-headers
+
+    # Application Services
+    acme-router:
+      rule: "PathPrefix(`/.well-known/acme-challenge/`)"
+      service: "noop@internal"
+      entryPoints:
+        - "http"
+      priority: 999  # Highest priority
+      middlewares:
+        - acme-middleware
+
+    # Your website router with lower priority
+    website:
+      rule: "Host(`bobparsons.dev`) || Host(`www.bobparsons.dev`)"
+      service: website-service
+      entryPoints:
+        - http
+        - https
+      priority: 1  # Lower priority
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+
+    nas:
+      rule: "Host(`nas.bobparsons.dev`)"
+      service: nas-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - nas-headers
+
+    stage:
+      rule: "Host(`stage.waugze.com`)"
+      service: stage-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+        - websocket-headers
+
+    nextcloud:
+      rule: "Host(`parfam.waugze.com`)"
+      service: nextcloud-service
+      entryPoints:
+        - http
+        - https
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - nextcloud-headers
+        - nextcloud-buffering
+        - websocket-headers
+
+  # Service definitions
+  services:
+    grafana-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.201:3001"
+
+    drone-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.200:8040"
+
+    warden-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.201:9480"
+
+    jellyfin-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.201:8096"
+        responseForwarding:
+          flushInterval: "100ms"
+
+    auth-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.200:8088"
+
+    website-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.200:3076"
+        passHostHeader: true
+
+    nas-service:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "https://192.168.86.201:9443"
+        serversTransport: internal-secure
+
+    stage-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.86.200:3070"
+
+    nextcloud-service:
+      loadBalancer:
+        passHostHeader: true
+        responseForwarding:
+          flushInterval: "100ms"
+        servers:
+          - url: "http://192.168.86.200:11000"
+        healthCheck:
+          path: /status.php
+          interval: "10s"
+          timeout: "3s"
+        serversTransport: default-secure

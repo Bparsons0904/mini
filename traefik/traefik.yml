@@ -1,0 +1,58 @@
+api:
+  dashboard: true
+  insecure: false
+
+entryPoints:
+  http:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: https
+          scheme: https
+          permanent: true
+  https:
+    address: ":443"
+  admin:
+    address: ":8081"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "deadstylebp@gmail.com"
+      storage: acme.json
+      httpChallenge:
+        entryPoint: http
+
+log:
+  level: DEBUG
+  format: json
+
+accessLog:
+  filePath: "/var/log/traefik/access.log"  
+  format: json
+  bufferingSize: 100
+  fields:
+    defaultMode: keep
+    headers:
+      defaultMode: drop
+      names:
+        User-Agent: keep
+        Authorization: redact
+        Content-Type: keep
+
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    entryPoint: admin
+    buckets:
+      - 0.1
+      - 0.3
+      - 1.2
+      - 5.0
+
+providers:
+  file:
+    filename: /config.yml

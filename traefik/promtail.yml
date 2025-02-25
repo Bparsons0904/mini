@@ -1,0 +1,56 @@
+server:
+  http_listen_address: 0.0.0.0
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://192.168.86.201:9428/insert/loki/api/v1/push?_stream_fields=container,service,job,level,host,env
+    tenant_id: "0:0"
+
+scrape_configs:
+  - job_name: traefik
+    pipeline_stages:
+      - docker: {}
+      # First try JSON format
+      - match:
+          selector: '{container="traefik"} |~ "^{"'
+          stages:
+            - json:
+                expressions:
+                  timestamp: time
+                  level: level
+                  message: msg
+            - labels:
+                level:
+            - timestamp:
+                source: timestamp
+                format: RFC3339
+                location: UTC
+
+      # Then try text format
+      - match:
+          selector: '{container="traefik"} |~ "^time="'
+          stages:
+            - regex:
+                expression: 'time="(?P<timestamp>[^"]+)" level=(?P<level>[^ ]+) msg="(?P<message>.*)"'
+            - labels:
+                level:
+            - timestamp:
+                source: timestamp
+                format: RFC3339
+                location: UTC
+
+      # Add static labels last
+      - static_labels:
+          service: "traefik"
+          env: "prod"
+          host: "${HOSTNAME}"
+
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: name
+            values: ["traefik"]
